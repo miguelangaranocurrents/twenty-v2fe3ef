@@ -45,6 +45,12 @@ export const computeWhereConditionParts = ({
 
   const isDateTimeField = fieldMetadataType === FieldMetadataType.DATE_TIME;
 
+  const isNullSafeEqualityFieldType =
+    (fieldMetadataType === FieldMetadataType.NUMBER ||
+      fieldMetadataType === FieldMetadataType.NUMERIC) &&
+    value !== null &&
+    value !== undefined;
+
   //TODO : Remove filter null equivalence injection once feature flag removed + null equivalence transformation added in ORM
   const nullEquivalentFieldValue = findPostgresDefaultNullEquivalentValue(
     value,
@@ -64,6 +70,14 @@ export const computeWhereConditionParts = ({
       if (isDateTimeField) {
         return {
           sql: `(${fieldReference} >= :${key}${paramSuffix} AND ${fieldReference} < :${key}${paramSuffix}::timestamptz + interval '1 millisecond')${hasNullEquivalentFieldValue ? ` OR ${fieldReference} IS NULL` : ''}`,
+          params: { [`${key}${paramSuffix}`]: value },
+        };
+      }
+
+      // Null-safe equality so that a negated filter (not: { eq }) keeps rows where the value is NULL
+      if (isNullSafeEqualityFieldType) {
+        return {
+          sql: `${fieldReference} IS NOT DISTINCT FROM :${key}${paramSuffix}`,
           params: { [`${key}${paramSuffix}`]: value },
         };
       }
